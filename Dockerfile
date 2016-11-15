@@ -1,29 +1,49 @@
-#FROM newsdev/varnish:4.1.0
-FROM debian:8
+FROM debian:jessie
 
-ENV DEBIAN_FRONTEND noninteractive
+RUN \
+  useradd -r -s /bin/false varnishd
 
-RUN apt-get update -qq && apt-get install -qq \
-    curl \
-    libedit2 \
-    libjemalloc1 \
+# Install Varnish source build dependencies.
+RUN \
+  apt-get update && apt-get install -y --no-install-recommends \
+    automake \
     build-essential \
-&& apt-get autoremove -y \
-&& rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    curl \
+    libedit-dev \
+    libjemalloc-dev \
+    libncurses-dev \
+    libpcre3-dev \
+    libtool \
+    pkg-config \
+    python-docutils \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 
-ENV VARNISH_VERSION 5.0.0
+# Install Varnish from source, so that Varnish modules can be compiled and installed.
+ENV VARNISH_VERSION=5.0.0
+#ENV VARNISH_SHA256SUM=4a6ea08e30b62fbf25f884a65f0d8af42e9cc9d25bf70f45ae4417c4f1c99017
+RUN \
+  apt-get update && \
+  mkdir -p /usr/local/src && \
+  cd /usr/local/src && \
+  curl -sfLO https://repo.varnish-cache.org/source/varnish-$VARNISH_VERSION.tar.gz && \
+  #echo "${VARNISH_SHA256SUM} varnish-$VARNISH_VERSION.tar.gz" | sha256sum -c - && \
+  tar -xzf varnish-$VARNISH_VERSION.tar.gz && \
+  cd varnish-$VARNISH_VERSION && \
+  ./autogen.sh && \
+  ./configure && \
+  make install && \
+  rm ../varnish-$VARNISH_VERSION.tar.gz
 
-RUN curl -J -L -s -k \
-    "https://repo.varnish-cache.org/pkg/${VARNISH_VERSION}/varnish_${VARNISH_VERSION}-1_amd64.deb" \
-    -o /tmp/varnish.deb \
-&& dpkg -i /tmp/varnish.deb \
-&& rm /tmp/varnish.deb
+RUN mkdir /etc/varnish
+RUN mkdir /var/lib/varnish
 
 COPY start-varnishd.sh /usr/local/bin/start-varnishd
 RUN chmod +x /usr/local/bin/start-varnishd
 
 ENV VARNISH_PORT 80
-ENV VARNISH_STORAGE malloc,100m
+ENV VARNISH_STORAGE malloc,1G
 
 EXPOSE 80
 
